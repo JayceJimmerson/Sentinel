@@ -27,7 +27,7 @@ Sentinel fetches near-Earth asteroid close-approach data from NASA's NeoWs API a
 **1. Clone the repository**
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/JayceJimmerson/Sentinel
 cd Sentinel
 ```
 
