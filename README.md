@@ -51,7 +51,11 @@ pip install -r requirements.txt
 
 **4. Configure environment variables**
 
-Copy the example below into a file named `.env` in the project root:
+Copy `.env.example` to `.env` and fill in your keys:
+
+```bash
+cp .env.example .env
+```
 
 ```env
 NASA_API_KEY=your_nasa_api_key_here
