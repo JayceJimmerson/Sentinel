@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Reports — Sentinel{% endblock %}
+
+{% block content %}
+<style>
+  .report-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 1rem;
+  }
+
+  .report-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 1.25rem;
+    color: var(--text);
+    text-decoration: none;
+    transition: border-color 0.15s, background 0.15s, transform 0.15s;
+  }
+
+  .report-card:hover {
+    border-color: var(--accent);
+    background: var(--surface-alt);
+    transform: translateY(-2px);
+    text-decoration: none;
+    color: var(--text);
+  }
+
+  .report-date-range {
+    font-size: 1.05rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .report-card-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .report-card-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+  }
+
+  .report-card-stats .stat-chip {
+    padding: 0.5rem 0.6rem;
+    min-width: unset;
+    align-items: center;
+    text-align: center;
+  }
+
+  .report-card-stats .stat-value {
+    font-size: 1.05rem;
+  }
+
+  .report-card-footer {
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+  }
+
+  .report-card-footer .timestamp { color: var(--muted); }
+  .report-card-footer .view-link { color: var(--accent); }
+
+  @media (max-width: 480px) {
+    .report-card-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="page-header">
+  <h1 class="page-title">Sentinel Reports</h1>
+  <p class="page-subtitle">
+    {% if reports %}
+      {{ reports | length }} report{{ 's' if reports | length != 1 }} on record
+    {% endif %}
+  </p>
+</div>
+
+{% if not reports %}
+<div class="empty-state">
+  <span class="empty-icon">&#9881;</span>
+  <h2>No reports yet</h2>
+  <p>Run the tracker to fetch asteroid data and generate your first report.</p>
+  <code>python sentinel.py</code>
+</div>
+
+{% else %}
+<div class="report-grid">
+  {% for r in reports %}
+  <a href="/report/{{ r['id'] }}" class="report-card">
+
+    <div>
+      <div class="report-date-range">
+        {{ r['start_date'] }} &rarr; {{ r['end_date'] }}
+      </div>
+    </div>
+
+    <div class="report-card-meta">
+      <span class="badge badge-model">{{ r['model'] }}</span>
+      {% if r['hazardous_count'] and r['hazardous_count'] > 0 %}
+        <span class="badge badge-hazardous">&#9888; {{ r['hazardous_count'] }} hazardous</span>
+      {% else %}
+        <span class="badge badge-safe">&#10003; No hazardous</span>
+      {% endif %}
+    </div>
+
+    <div class="report-card-stats">
+      <div class="stat-chip">
+        <span class="stat-label">Objects</span>
+        <span class="stat-value">{{ r['object_count'] or 0 }}</span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-label">Hazardous</span>
+        <span class="stat-value {% if r['hazardous_count'] and r['hazardous_count'] > 0 %}risk-high{% endif %}">
+          {{ r['hazardous_count'] or 0 }}
+        </span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-label">Max Risk</span>
+        <span class="stat-value {{ risk_class(r['max_risk_score'] or 1) }}">
+          {{ r['max_risk_score'] or '—' }}<small>/10</small>
+        </span>
+      </div>
+      <div class="stat-chip">
+        <span class="stat-label">Avg Risk</span>
+        <span class="stat-value {{ risk_class((r['avg_risk_score'] or 1) | round | int) }}">
+          {{ r['avg_risk_score'] or '—' }}<small>/10</small>
+        </span>
+      </div>
+    </div>
+
+    <div class="report-card-footer">
+      <span class="timestamp">
+        {{ r['created_at'] | replace('T', ' ') | replace('+00:00', '') }} UTC
+        &middot; #{{ r['id'] }}
+      </span>
+      <span class="view-link">View &rarr;</span>
+    </div>
+
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}
