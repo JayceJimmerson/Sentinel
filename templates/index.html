@@ -1,8 +1,76 @@
 {% extends "base.html" %}
-{% block title %}Reports — Sentinel{% endblock %}
+{% block title %}Dashboard — Sentinel{% endblock %}
 
 {% block content %}
 <style>
+  /* ── Dashboard stats row ────────────────────────────────────────── */
+  .dash-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .dash-stats .stat-chip {
+    padding: 1rem 1.25rem;
+  }
+
+  .dash-stats .stat-value {
+    font-size: 1.6rem;
+  }
+
+  /* ── Chart card ─────────────────────────────────────────────────── */
+  .chart-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    margin-bottom: 2rem;
+    overflow: hidden;
+  }
+
+  .chart-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .chart-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--text);
+  }
+
+  .chart-subtitle {
+    font-size: 0.75rem;
+    color: var(--muted);
+  }
+
+  .chart-body {
+    padding: 1.25rem 1.25rem 1rem;
+  }
+
+  /* ── Section header ─────────────────────────────────────────────── */
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+
+  .section-meta {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  /* ── Report grid ────────────────────────────────────────────────── */
   .report-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
@@ -70,25 +138,266 @@
   }
 
   .report-card-footer .timestamp { color: var(--muted); }
-  .report-card-footer .view-link { color: var(--accent); }
+  .report-card-footer .view-link  { color: var(--accent); }
 
-  @media (max-width: 480px) {
-    .report-card-stats { grid-template-columns: repeat(2, 1fr); }
+  /* ── Next approach banner ───────────────────────────────────────── */
+  .approach-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left-width: 3px;
+    border-radius: var(--radius);
+    padding: 0.65rem 1rem;
+    margin-bottom: 1.25rem;
+    font-size: 0.875rem;
+    flex-wrap: wrap;
+  }
+
+  .approach-banner.risk-low  { border-left-color: var(--green); }
+  .approach-banner.risk-mid  { border-left-color: var(--yellow); }
+  .approach-banner.risk-high { border-left-color: var(--red); }
+
+  .approach-pulse {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    animation: pulse 2s ease-in-out infinite;
+  }
+
+  .risk-low  .approach-pulse { background: var(--green); }
+  .risk-mid  .approach-pulse { background: var(--yellow); }
+  .risk-high .approach-pulse { background: var(--red); }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50%       { opacity: 0.4; transform: scale(0.75); }
+  }
+
+  .approach-label {
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  .approach-name {
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .approach-detail {
+    color: var(--muted);
+  }
+
+  .approach-detail strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  /* ── Responsive ─────────────────────────────────────────────────── */
+  @media (max-width: 600px) {
+    .dash-stats             { grid-template-columns: repeat(2, 1fr); }
+    .report-card-stats      { grid-template-columns: repeat(2, 1fr); }
   }
 </style>
 
-<div class="page-header">
-  <h1 class="page-title">Sentinel Reports</h1>
-  <p class="page-subtitle">
-    {% if reports %}
-      {{ reports | length }} report{{ 's' if reports | length != 1 }} on record
-    {% endif %}
-  </p>
+{# ── Next close approach banner ────────────────────────────────────── #}
+{% if next_approach %}
+{% set na = next_approach %}
+<div class="approach-banner {{ risk_class(na['risk_score']) }}">
+  <span class="approach-pulse"></span>
+  <span class="approach-label">Next close approach</span>
+  <span class="approach-name">{{ na['name'] }}</span>
+  <span class="approach-detail">
+    on <strong>{{ na['approach_date'] | fmtdate }}</strong>
+    &middot; <strong>{{ na['miss_distance_km'] | thousands }} km</strong>
+    &middot; Risk <strong>{{ na['risk_score'] }}/10</strong>
+    {% if na['hazardous'] %}&middot; <span class="risk-high">&#9888; Potentially Hazardous</span>{% endif %}
+  </span>
+</div>
+{% endif %}
+
+{# ── Aggregate totals ──────────────────────────────────────────────── #}
+{% set ns = namespace(total_haz=0, peak_risk=0) %}
+{% for r in reports %}
+  {% set ns.total_haz  = ns.total_haz + (r['hazardous_count'] or 0) %}
+  {% if (r['max_risk_score'] or 0) > ns.peak_risk %}
+    {% set ns.peak_risk = r['max_risk_score'] or 0 %}
+  {% endif %}
+{% endfor %}
+
+{# ── Stats row ─────────────────────────────────────────────────────── #}
+<div class="dash-stats">
+  <div class="stat-chip">
+    <span class="stat-label">Reports</span>
+    <span class="stat-value">{{ reports | length }}</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-label">Asteroids Tracked</span>
+    <span class="stat-value">{{ total_asteroids }}</span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-label">Hazardous Objects</span>
+    <span class="stat-value {% if ns.total_haz > 0 %}risk-high{% endif %}">
+      {{ ns.total_haz }}
+    </span>
+  </div>
+  <div class="stat-chip">
+    <span class="stat-label">Peak Risk Score</span>
+    <span class="stat-value {{ risk_class(ns.peak_risk | int) }}">
+      {{ ns.peak_risk or '—' }}{% if ns.peak_risk %}<small>/10</small>{% endif %}
+    </span>
+  </div>
+</div>
+
+{# ── Chart ─────────────────────────────────────────────────────────── #}
+{% if approach_timeline %}
+  {# Serialize timeline rows for Chart.js #}
+  {% set ch_labels = [] %}
+  {% set ch_counts = [] %}
+  {% set ch_risks  = [] %}
+  {% set ch_haz    = [] %}
+  {% for row in approach_timeline %}
+    {% set _ = ch_labels.append(row['approach_date']) %}
+    {% set _ = ch_counts.append(row['count']) %}
+    {% set _ = ch_risks.append(row['max_risk']) %}
+    {% set _ = ch_haz.append(row['hazardous_count'] or 0) %}
+  {% endfor %}
+
+<div class="chart-card">
+  <div class="chart-header">
+    <span class="chart-title">Close Approach Timeline</span>
+    <span class="chart-subtitle">All tracked approaches by date &mdash; deduplicated across reports</span>
+  </div>
+  <div class="chart-body">
+    <canvas id="overviewChart" height="80"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+  const labels    = {{ ch_labels | tojson }};
+  const counts    = {{ ch_counts | tojson }};
+  const risks     = {{ ch_risks  | tojson }};
+  const hazCounts = {{ ch_haz    | tojson }};
+
+  function riskColor(v, alpha) {
+    const a = alpha ?? 1;
+    if (v >= 7) return `rgba(248,81,73,${a})`;
+    if (v >= 4) return `rgba(210,153,34,${a})`;
+    return `rgba(63,185,80,${a})`;
+  }
+
+  new Chart(document.getElementById('overviewChart'), {
+    data: {
+      labels,
+      datasets: [
+        {
+          type: 'bar',
+          label: 'Asteroids',
+          data: counts,
+          backgroundColor: counts.map((_, i) => riskColor(risks[i], 0.25)),
+          borderColor:     counts.map((_, i) => riskColor(risks[i], 0.7)),
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yCount',
+          order: 2,
+        },
+        {
+          type: 'bar',
+          label: 'Hazardous',
+          data: hazCounts,
+          backgroundColor: 'rgba(248,81,73,0.18)',
+          borderColor:     'rgba(248,81,73,0.45)',
+          borderWidth: 1,
+          borderRadius: 4,
+          yAxisID: 'yCount',
+          order: 3,
+        },
+        {
+          type: 'line',
+          label: 'Max Risk',
+          data: risks,
+          borderColor: 'rgba(139,148,158,0.6)',
+          backgroundColor: 'transparent',
+          tension: 0.3,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+          pointBackgroundColor: risks.map(v => riskColor(v)),
+          pointBorderColor: 'transparent',
+          borderWidth: 1.5,
+          borderDash: [4, 3],
+          yAxisID: 'yRisk',
+          order: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: true,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#8b949e',
+            font: { size: 11 },
+            boxWidth: 12,
+            padding: 16,
+          },
+        },
+        tooltip: {
+          backgroundColor: '#161b22',
+          borderColor: '#30363d',
+          borderWidth: 1,
+          titleColor: '#e6edf3',
+          bodyColor: '#8b949e',
+          padding: 10,
+        },
+      },
+      scales: {
+        x: {
+          ticks: { color: '#8b949e', font: { size: 10 }, maxRotation: 40, autoSkip: true, maxTicksLimit: 14 },
+          grid:  { color: 'rgba(48,54,61,0.5)' },
+        },
+        yCount: {
+          position: 'left',
+          beginAtZero: true,
+          title: { display: true, text: 'Asteroids', color: '#8b949e', font: { size: 10 } },
+          ticks: { color: '#8b949e', font: { size: 10 }, precision: 0 },
+          grid:  { color: 'rgba(48,54,61,0.5)' },
+        },
+        yRisk: {
+          position: 'right',
+          min: 0,
+          max: 10,
+          title: { display: true, text: 'Risk (0–10)', color: '#8b949e', font: { size: 10 } },
+          ticks: { color: '#8b949e', font: { size: 10 } },
+          grid:  { drawOnChartArea: false },
+        },
+      },
+    },
+  });
+})();
+</script>
+{% endif %}
+
+{# ── Reports section ───────────────────────────────────────────────── #}
+<div class="section-header">
+  <h2 class="section-title">Reports</h2>
+  {% if reports %}
+    <span class="section-meta">{{ reports | length }} on record</span>
+  {% endif %}
 </div>
 
 {% if not reports %}
 <div class="empty-state">
-  <span class="empty-icon">&#9881;</span>
+  <span class="empty-icon">☄️</span>
   <h2>No reports yet</h2>
   <p>Run the tracker to fetch asteroid data and generate your first report.</p>
   <code>python sentinel.py</code>

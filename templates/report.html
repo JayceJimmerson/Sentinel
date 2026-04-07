@@ -249,7 +249,7 @@
 
     <hr class="divider" />
 
-    <p class="asteroid-narrative">{{ a['narrative'] }}</p>
+    <p class="asteroid-narrative">{{ a['narrative'] | replace('# Risk Narrative', '') | trim }}</p>
 
   </div>
   {% endfor %}

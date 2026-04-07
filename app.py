@@ -36,12 +36,32 @@ def thousands_filter(value):
         return value
 
 
+@app.template_filter("fmtdate")
+def fmtdate_filter(value):
+    """Format an ISO date string as 'Mon D' (e.g. 'Apr 9')."""
+    try:
+        from datetime import date
+        d = date.fromisoformat(str(value))
+        return f"{d.strftime('%b')} {d.day}"
+    except (ValueError, TypeError):
+        return value
+
+
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
 @app.route("/")
 def index():
     reports = db.get_reports()
-    return render_template("index.html", reports=reports)
+    total_asteroids = db.get_total_asteroid_count()
+    next_approach = db.get_next_approach()
+    approach_timeline = db.get_approach_timeline()
+    return render_template(
+        "index.html",
+        reports=reports,
+        total_asteroids=total_asteroids,
+        next_approach=next_approach,
+        approach_timeline=approach_timeline,
+    )
 
 
 @app.route("/report/<int:report_id>")

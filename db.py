@@ -131,6 +131,57 @@ def get_reports() -> list[sqlite3.Row]:
         ).fetchall()
 
 
+def get_total_asteroid_count() -> int:
+    """Total number of asteroid records across all reports."""
+    with _connect() as conn:
+        return conn.execute("SELECT COUNT(*) FROM asteroids").fetchone()[0]
+
+
+def get_approach_timeline() -> list[sqlite3.Row]:
+    """
+    Aggregate close-approach counts by date across all reports,
+    deduplicating asteroids that appear in multiple reports.
+    Returns rows of (approach_date, count, hazardous_count, max_risk).
+    """
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT
+                approach_date,
+                COUNT(*)          AS count,
+                SUM(hazardous)    AS hazardous_count,
+                MAX(risk_score)   AS max_risk
+            FROM (
+                SELECT nasa_id, approach_date,
+                       MAX(hazardous)   AS hazardous,
+                       MAX(risk_score)  AS risk_score
+                FROM asteroids
+                GROUP BY nasa_id, approach_date
+            )
+            GROUP BY approach_date
+            ORDER BY approach_date ASC
+            """
+        ).fetchall()
+
+
+def get_next_approach() -> sqlite3.Row | None:
+    """
+    Return the single asteroid with the nearest upcoming approach_date (>= today).
+    If multiple reports contain the same asteroid, the closest-distance record wins.
+    Returns None when no future approaches are on record.
+    """
+    with _connect() as conn:
+        return conn.execute(
+            """
+            SELECT name, approach_date, miss_distance_km, risk_score, hazardous
+            FROM asteroids
+            WHERE approach_date >= date('now')
+            ORDER BY approach_date ASC, miss_distance_km ASC
+            LIMIT 1
+            """
+        ).fetchone()
+
+
 def get_report(report_id: int) -> tuple:
     """
     Returns (report_row, asteroid_rows) for the given report_id.
