@@ -1,6 +1,6 @@
 # Sentinel
 
-Sentinel is a Python script I built to fetch near-Earth asteroid data from NASA's NeoWs API. It uses Google's Gemini AI to analyze the data, give each asteroid a risk score (1-10), and write a short summary of how dangerous it is.
+Sentinel is a Python script I built to fetch near-Earth asteroid data from NASA's JPL Close-Approach Data API. It uses Google's Gemini AI to analyze the data, give each asteroid a risk score (1-10), and write a short summary of how dangerous it is.
 
 I originally had a web interface for this, but I realized it was better to keep things simple and just export the data so I can plug it straight into Power BI for making dashboards!
 
@@ -35,14 +35,13 @@ python -m venv .venv
 pip install -r requirements.txt
 ```
 
-**4. Get API Keys**
-You need two free API keys for this to work:
-- NASA API key: Get it at [api.nasa.gov](https://api.nasa.gov/)
+**4. Get an API Key**
+You need one free API key for this to work:
 - Gemini API key: Get it at [Google AI Studio](https://aistudio.google.com/)
+(Note: The NASA JPL endpoint is completely public and doesn't require a key!)
 
-Rename the `.env.example` file to `.env` and paste your keys in there:
+Rename the `.env.example` file to `.env` and paste your key in there:
 ```env
-NASA_API_KEY=your_nasa_api_key_here
 GEMINI_API_KEY=your_gemini_api_key_here
 ```
 

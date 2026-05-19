@@ -26,15 +26,15 @@ import db
 
 load_dotenv()
 
-NASA_API_KEY   = os.getenv("NASA_API_KEY")
+NASA_API_KEY   = os.getenv("NASA_API_KEY", "")  # No longer required for JPL CAD API
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
-NASA_NEO_URL  = "https://api.nasa.gov/neo/rest/v1/feed"
+JPL_CAD_URL   = "https://ssd-api.jpl.nasa.gov/cad.api"
 GEMINI_MODEL  = "gemini-2.5-flash"
 OUTPUT_DIR    = os.path.join(os.path.dirname(__file__), "outputs")
 
-# NASA enforces a maximum 7-day window per request
-NASA_MAX_WINDOW = 7
+# JPL CAD can handle larger windows, we'll chunk by 60 days
+API_MAX_WINDOW = 60
 
 
 # ── CLI arguments ──────────────────────────────────────────────────────────────
@@ -58,39 +58,54 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-# ── NASA NeoWs ────────────────────────────────────────────────────────────────
+# ── JPL CAD API ───────────────────────────────────────────────────────────────
 
 def _fetch_chunk(start: date, end: date, max_distance_km: float) -> list[dict]:
-    """Single NASA API call (max 7-day window)."""
+    """Single JPL CAD API call."""
+    max_dist_au = max_distance_km / 149_597_870.7
     params = {
-        "start_date": start.isoformat(),
-        "end_date":   end.isoformat(),
-        "api_key":    NASA_API_KEY,
+        "date-min": start.isoformat(),
+        "date-max": end.isoformat(),
+        "dist-max": f"{max_dist_au:.6f}",
+        "fullname": "true"
     }
-    response = requests.get(NASA_NEO_URL, params=params, timeout=15)
+    response = requests.get(JPL_CAD_URL, params=params, timeout=15)
     response.raise_for_status()
     data = response.json()
 
     asteroids = []
-    for day_objects in data["near_earth_objects"].values():
-        for obj in day_objects:
-            approach = obj["close_approach_data"][0]
-            miss_km  = float(approach["miss_distance"]["kilometers"])
+    if int(data.get("count", 0)) == 0:
+        return []
 
-            if miss_km > max_distance_km:
-                continue
+    fields = data["fields"]
+    for row in data["data"]:
+        obj = dict(zip(fields, row))
+        
+        miss_km = float(obj["dist"]) * 149_597_870.7
+        v_kph = float(obj["v_rel"]) * 3600.0
+        
+        # Estimate diameter from absolute magnitude (H)
+        h_mag = float(obj["h"]) if obj["h"] else 25.0
+        d_min = 2_658_000.0 * (10 ** (-0.2 * h_mag))
+        d_max = 5_943_500.0 * (10 ** (-0.2 * h_mag))
+        
+        # Rough hazard approximation: H <= 22 and miss <= 0.05 AU
+        hazardous = bool(h_mag <= 22.0 and float(obj["dist"]) <= 0.05)
+        
+        # Convert date format slightly for consistency
+        approach_date = obj["cd"][:10] if obj["cd"] else str(start)
 
-            asteroids.append({
-                "name":             obj["name"],
-                "nasa_id":          obj["id"],
-                "hazardous":        obj["is_potentially_hazardous_asteroid"],
-                "diameter_min_m":   obj["estimated_diameter"]["meters"]["estimated_diameter_min"],
-                "diameter_max_m":   obj["estimated_diameter"]["meters"]["estimated_diameter_max"],
-                "approach_date":    approach["close_approach_date"],
-                "velocity_kph":     float(approach["relative_velocity"]["kilometers_per_hour"]),
-                "miss_distance_km": miss_km,
-                "orbiting_body":    approach["orbiting_body"],
-            })
+        asteroids.append({
+            "name":             obj["fullname"].strip(),
+            "nasa_id":          obj["des"],  # Designation as ID
+            "hazardous":        hazardous,
+            "diameter_min_m":   d_min,
+            "diameter_max_m":   d_max,
+            "approach_date":    approach_date,
+            "velocity_kph":     v_kph,
+            "miss_distance_km": miss_km,
+            "orbiting_body":    "Earth",
+        })
 
     return asteroids
 
@@ -105,11 +120,11 @@ def fetch_neos(start: date, end: date, max_distance_km: float) -> list[dict]:
     chunk_num   = 0
 
     while chunk_start <= end:
-        chunk_end = min(chunk_start + timedelta(days=NASA_MAX_WINDOW - 1), end)
+        chunk_end = min(chunk_start + timedelta(days=API_MAX_WINDOW - 1), end)
         chunk_num += 1
-        chunks_total = -(-total_days // NASA_MAX_WINDOW)  # ceiling division
+        chunks_total = -(-total_days // API_MAX_WINDOW)  # ceiling division
         print(
-            f"  Fetching NASA data chunk {chunk_num}/{chunks_total}: {chunk_start} → {chunk_end}…",
+            f"  Fetching JPL CAD data chunk {chunk_num}/{chunks_total}: {chunk_start} → {chunk_end}…",
             end="\r", flush=True,
         )
 
@@ -261,7 +276,7 @@ def main() -> None:
     args = parse_args()
 
     missing = [
-        name for name, val in [("NASA_API_KEY", NASA_API_KEY), ("GEMINI_API_KEY", GEMINI_API_KEY)]
+        name for name, val in [("GEMINI_API_KEY", GEMINI_API_KEY)]
         if not val or val.endswith("_here")
     ]
     if missing:
