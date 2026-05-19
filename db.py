@@ -205,35 +205,3 @@ def get_report(report_id: int) -> tuple:
             (report_id,),
         ).fetchall()
     return report, asteroids
-
-
-def export_to_csv(csv_path: str = "asteroids_data.csv") -> None:
-    """
-    Exports the entire asteroids table to a CSV file for easy importing into Power BI.
-    """
-    import csv
-
-    with _connect() as conn:
-        # Get all asteroids with their associated report metadata
-        cursor = conn.execute(
-            """
-            SELECT 
-                r.start_date, r.end_date,
-                a.name, a.approach_date, a.miss_distance_km, 
-                a.velocity_kph, a.diameter_min_m, a.diameter_max_m,
-                a.hazardous, a.risk_score, a.narrative
-            FROM asteroids a
-            JOIN reports r ON a.report_id = r.id
-            ORDER BY a.approach_date DESC
-            """
-        )
-        
-        # Get column names
-        column_names = [description[0] for description in cursor.description]
-        rows = cursor.fetchall()
-
-    with open(csv_path, mode="w", newline="", encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerow(column_names)
-        for row in rows:
-            writer.writerow(row)

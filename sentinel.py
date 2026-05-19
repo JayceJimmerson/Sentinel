@@ -313,11 +313,6 @@ def main() -> None:
     )
     print(f"Report saved → {filepath}")
     print(f"Database updated (report #{report_id})")
-    
-    csv_path = os.path.join(OUTPUT_DIR, "asteroids_data.csv")
-    db.export_to_csv(csv_path)
-    print(f"Data exported for Power BI → {csv_path}")
-
 
 if __name__ == "__main__":
     main()
