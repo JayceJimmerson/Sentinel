@@ -124,7 +124,7 @@ def fetch_neos(start: date, end: date, max_distance_km: float) -> list[dict]:
         chunk_num += 1
         chunks_total = -(-total_days // API_MAX_WINDOW)  # ceiling division
         print(
-            f"  Fetching JPL CAD data chunk {chunk_num}/{chunks_total}: {chunk_start} → {chunk_end}…",
+            f"  Fetching JPL CAD data chunk {chunk_num}/{chunks_total}: {chunk_start} -> {chunk_end}...",
             end="\r", flush=True,
         )
 
@@ -186,7 +186,7 @@ def _call_gemini(model: genai.GenerativeModel, prompt: str) -> str:
             # Basic retry on common errors
             if ("429" in msg or "503" in msg or "quota" in msg.lower()) and attempt < 3:
                 wait = 10 * (attempt + 1)
-                print(f"\n  API limit/error — waiting {wait}s before retry…", flush=True)
+                print(f"\n  API limit/error - waiting {wait}s before retry...", flush=True)
                 time.sleep(wait)
             else:
                 raise
@@ -288,21 +288,21 @@ def main() -> None:
     start_date = args.start
     end_date   = start_date + timedelta(days=args.days - 1)
 
-    print(f"Fetching NEO data: {start_date} → {end_date} (within {args.max_distance:,.0f} km)…")
+    print(f"Fetching NEO data: {start_date} -> {end_date} (within {args.max_distance:,.0f} km)...")
     asteroids = fetch_neos(start_date, end_date, args.max_distance)
 
     if not asteroids:
         print(f"No asteroids found within {args.max_distance:,.0f} km in that window.")
         sys.exit(0)
 
-    print(f"Found {len(asteroids)} object(s). Generating Gemini assessments…")
+    print(f"Found {len(asteroids)} object(s). Generating Gemini assessments...")
 
     genai.configure(api_key=GEMINI_API_KEY)
     model = genai.GenerativeModel(GEMINI_MODEL)
     
     assessments = []
     for i, asteroid in enumerate(asteroids, start=1):
-        print(f"  [{i}/{len(asteroids)}] {asteroid['name']}…", end="\r", flush=True)
+        print(f"  [{i}/{len(asteroids)}] {asteroid['name']}...", end="\r", flush=True)
         assessments.append(generate_assessment(model, asteroid))
     print(" " * 80, end="\r")
 
@@ -311,7 +311,7 @@ def main() -> None:
         str(start_date), str(end_date), args.max_distance,
         GEMINI_MODEL, asteroids, assessments,
     )
-    print(f"Report saved → {filepath}")
+    print(f"Report saved -> {filepath}")
     print(f"Database updated (report #{report_id})")
 
 if __name__ == "__main__":
