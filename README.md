@@ -1,19 +1,22 @@
 # Sentinel
 
-Sentinel is a Python web application that fetches near-Earth asteroid data from NASA's JPL Close-Approach Data API and uses Google's Gemini AI to analyze the data. It gives each asteroid a risk score (1-10) and writes a short summary of how dangerous it is.
+Sentinel is an interactive space-registry and risk-profile dashboard that tracks near-Earth objects (NEOs). It pulls real-time close-approach data directly from NASA's JPL API and leverages Google's Gemini AI to generate plain-English risk summaries and visual threat-severity scores (1-10).
 
-The entire app is built with **Streamlit**, giving it a beautiful, interactive dashboard where you can browse past asteroid assessments and generate new ones!
+The entire app is built in **Python** and packaged in a stunning, high-end **Streamlit** dashboard, making it easy to track space telemetry and explore historical database records!
+
+---
+
+## Key Features
+
+- **Interactive Telemetry Dashboard:** View close-approach data including approach date, velocity (km/h), max/min estimated diameter (meters), and miss distance (km).
+- **Gemini AI Risk Assessment:** Integrates Google's `gemini-2.5-flash` model to analyze complex aerospace metrics and write intuitive, factual threat summaries alongside a curated 1-10 threat rating.
+- **Glassmorphic UI Elements:** Styled with curated typography (Space Grotesk & Inter), visual linear-gradient threat meters, and a clean, technical dark mode.
+- **Space Analytics & Visualization:** Native charts plotting maximum diameter vs. proximity (scatter chart) and threat-level distribution frequency (bar chart).
+- **Persistent Local Database:** Leverages SQLite to store every generated report and asteroid assessment so you can build and inspect your own space telemetry history.
+- **Public NASA JPL CAD API:** Swapped from NeoWs to the open JPL Close-Approach Data API to completely eliminate NASA API key friction for a zero-friction startup.
 
 ---
 
-## What It Does
-
-- Pulls asteroid data from NASA for any date range you want (no NASA API key required!).
-- Uses Gemini AI to look at the speed, size, and distance, and grades the risk from 1 to 10.
-- Saves all reports to a local SQLite database so you can view your history.
-- Presents everything in a clean, modern web interface.
-
----
 
 ## How to Set It Up
 
