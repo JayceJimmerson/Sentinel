@@ -18,7 +18,7 @@ import time
 from datetime import date, timedelta
 
 import requests
-import anthropic
+import google.generativeai as genai
 from dotenv import load_dotenv
 import db
 
@@ -26,11 +26,11 @@ import db
 
 load_dotenv()
 
-NASA_API_KEY      = os.getenv("NASA_API_KEY")
-ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
+NASA_API_KEY   = os.getenv("NASA_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 NASA_NEO_URL  = "https://api.nasa.gov/neo/rest/v1/feed"
-CLAUDE_MODEL  = "claude-haiku-4-5-20251001"
+GEMINI_MODEL  = "gemini-2.5-flash"
 OUTPUT_DIR    = os.path.join(os.path.dirname(__file__), "outputs")
 
 # NASA enforces a maximum 7-day window per request
@@ -124,11 +124,11 @@ def fetch_neos(start: date, end: date, max_distance_km: float) -> list[dict]:
     return sorted(all_asteroids, key=lambda a: a["miss_distance_km"])
 
 
-# ── Claude ────────────────────────────────────────────────────────────────────
+# ── Gemini ────────────────────────────────────────────────────────────────────
 
 def build_prompt(asteroid: dict) -> str:
     hazard_flag = "YES — flagged as potentially hazardous" if asteroid["hazardous"] else "No"
-    return f"""You are a space science communicator analyzing near-Earth asteroid data.
+    return f"""You are a space data analyst preparing insights for a dashboard.
 
 Given the data below, do two things:
 
@@ -160,34 +160,27 @@ Asteroid data:
 Write the narrative and score now:"""
 
 
-def _call_claude(client: anthropic.Anthropic, prompt: str) -> str:
-    """Call Claude with retry on 429 (rate limit) and 529 (overload)."""
+def _call_gemini(model: genai.GenerativeModel, prompt: str) -> str:
+    """Call Gemini with retry logic for rate limits or server errors."""
     for attempt in range(4):
         try:
-            message = client.messages.create(
-                model=CLAUDE_MODEL,
-                max_tokens=1024,
-                messages=[{"role": "user", "content": prompt}],
-            )
-            return message.content[0].text.strip()
+            response = model.generate_content(prompt)
+            return response.text.strip()
         except Exception as e:
             msg = str(e)
-            is_rate_limit = "429" in msg
-            is_overloaded = "529" in msg or "overloaded" in msg.lower()
-            if (is_rate_limit or is_overloaded) and attempt < 3:
-                match = re.search(r'retry.*?(\d+(?:\.\d+)?)s', msg, re.IGNORECASE)
-                wait  = float(match.group(1)) if match else 30 * (attempt + 1)
-                reason = "Rate limited" if is_rate_limit else "Server overloaded"
-                print(f"\n  {reason} — waiting {wait:.0f}s before retry…", flush=True)
+            # Basic retry on common errors
+            if ("429" in msg or "503" in msg or "quota" in msg.lower()) and attempt < 3:
+                wait = 10 * (attempt + 1)
+                print(f"\n  API limit/error — waiting {wait}s before retry…", flush=True)
                 time.sleep(wait)
             else:
                 raise
-    raise RuntimeError("Claude failed after 4 attempts")
+    raise RuntimeError("Gemini failed after 4 attempts")
 
 
-def generate_assessment(client: anthropic.Anthropic, asteroid: dict) -> dict:
+def generate_assessment(model: genai.GenerativeModel, asteroid: dict) -> dict:
     """Return {"narrative": str, "score": int} for one asteroid."""
-    raw = _call_claude(client, build_prompt(asteroid))
+    raw = _call_gemini(model, build_prompt(asteroid))
 
     # Extract score line, then remove it from the narrative text
     score_match = re.search(r'RISK_SCORE:\s*(\d+)', raw, re.IGNORECASE)
@@ -220,7 +213,7 @@ def build_markdown(
     lines.append(f"\n**Date range:** {start} → {end}  ")
     lines.append(f"**Objects within {max_distance_km:,.0f} km:** {len(asteroids)}  ")
     lines.append(f"**Generated:** {date.today()}  ")
-    lines.append(f"**Model:** {CLAUDE_MODEL}  ")
+    lines.append(f"**Model:** {GEMINI_MODEL}  ")
     lines.append(f"**Sorted by:** miss distance (closest first)\n")
     lines.append("---\n")
 
@@ -238,8 +231,8 @@ def build_markdown(
         lines.append(f"| Est. diameter | {asteroid['diameter_min_m']:.1f} – {asteroid['diameter_max_m']:.1f} m |")
         lines.append(f"| Orbiting body | {asteroid['orbiting_body']} |")
         lines.append(f"| NASA hazard flag | {'Yes' if asteroid['hazardous'] else 'No'} |")
-        lines.append(f"| **Claude risk score** | {score_emoji} **{score_bar(score)}** |\n")
-        lines.append("### Claude Risk Assessment\n")
+        lines.append(f"| **Gemini risk score** | {score_emoji} **{score_bar(score)}** |\n")
+        lines.append("### Gemini Risk Assessment\n")
         lines.append(assessment["narrative"])
         lines.append("\n---\n")
 
@@ -268,7 +261,7 @@ def main() -> None:
     args = parse_args()
 
     missing = [
-        name for name, val in [("NASA_API_KEY", NASA_API_KEY), ("ANTHROPIC_API_KEY", ANTHROPIC_API_KEY)]
+        name for name, val in [("NASA_API_KEY", NASA_API_KEY), ("GEMINI_API_KEY", GEMINI_API_KEY)]
         if not val or val.endswith("_here")
     ]
     if missing:
@@ -287,22 +280,28 @@ def main() -> None:
         print(f"No asteroids found within {args.max_distance:,.0f} km in that window.")
         sys.exit(0)
 
-    print(f"Found {len(asteroids)} object(s). Generating Claude assessments…")
+    print(f"Found {len(asteroids)} object(s). Generating Gemini assessments…")
 
-    client      = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    genai.configure(api_key=GEMINI_API_KEY)
+    model = genai.GenerativeModel(GEMINI_MODEL)
+    
     assessments = []
     for i, asteroid in enumerate(asteroids, start=1):
         print(f"  [{i}/{len(asteroids)}] {asteroid['name']}…", end="\r", flush=True)
-        assessments.append(generate_assessment(client, asteroid))
+        assessments.append(generate_assessment(model, asteroid))
     print(" " * 80, end="\r")
 
     filepath  = save_report(start_date, end_date, args.max_distance, asteroids, assessments)
     report_id = db.save_report(
         str(start_date), str(end_date), args.max_distance,
-        CLAUDE_MODEL, asteroids, assessments,
+        GEMINI_MODEL, asteroids, assessments,
     )
     print(f"Report saved → {filepath}")
     print(f"Database updated (report #{report_id})")
+    
+    csv_path = os.path.join(OUTPUT_DIR, "asteroids_data.csv")
+    db.export_to_csv(csv_path)
+    print(f"Data exported for Power BI → {csv_path}")
 
 
 if __name__ == "__main__":
